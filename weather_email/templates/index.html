@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>India Weather Mailer</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Arial, sans-serif;
+      background: #f4f6f9;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    header {
+      width: 100%;
+      background: linear-gradient(135deg, #1a73e8, #0d47a1);
+      color: #fff;
+      padding: 24px 32px;
+      text-align: center;
+    }
+    header h1 { font-size: 22px; }
+    header p  { font-size: 13px; opacity: 0.8; margin-top: 4px; }
+
+    .card {
+      background: #fff;
+      border-radius: 12px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+      padding: 32px;
+      width: 100%;
+      max-width: 580px;
+      margin: 32px 16px 0;
+    }
+
+    /* Scheduler banner */
+    .sched-banner {
+      border-radius: 8px;
+      padding: 14px 16px;
+      margin-bottom: 24px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .sched-banner.active   { background: #e8f5e9; border-left: 4px solid #4caf50; }
+    .sched-banner.pending  { background: #e8f0fe; border-left: 4px solid #1a73e8; }
+    .sched-banner.finished { background: #f5f5f5; border-left: 4px solid #aaa; }
+
+    .sched-banner .badge {
+      display: inline-block;
+      font-size: 11px;
+      font-weight: bold;
+      padding: 2px 8px;
+      border-radius: 20px;
+      margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    .active  .badge { background: #4caf50; color: #fff; }
+    .pending .badge { background: #1a73e8; color: #fff; }
+    .finished .badge { background: #aaa; color: #fff; }
+
+    .sched-banner .row { color: #444; }
+    .sched-banner .row span { font-weight: bold; color: #111; }
+    .sched-banner .next { margin-top: 4px; color: #1a73e8; font-weight: bold; }
+
+    label {
+      display: block;
+      font-size: 12px;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 6px;
+    }
+
+    select {
+      width: 100%;
+      padding: 10px 14px;
+      font-size: 15px;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      background: #f8f9ff;
+      outline: none;
+      cursor: pointer;
+      margin-bottom: 20px;
+      appearance: none;
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%231a73e8' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 14px center;
+    }
+    select:focus { border-color: #1a73e8; box-shadow: 0 0 0 3px rgba(26,115,232,0.15); }
+
+    button {
+      background: #1a73e8;
+      color: #fff;
+      border: none;
+      border-radius: 8px;
+      padding: 11px 24px;
+      font-size: 15px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    button:hover    { background: #1558b0; }
+    button:disabled { background: #aaa; cursor: not-allowed; }
+
+    .log-panel {
+      margin-top: 24px;
+      background: #0f1117;
+      border-radius: 8px;
+      padding: 16px;
+      min-height: 100px;
+      max-height: 300px;
+      overflow-y: auto;
+      font-family: "Courier New", monospace;
+      font-size: 13px;
+      display: none;
+    }
+    .log-panel.visible { display: block; }
+
+    .log-entry { padding: 3px 0; line-height: 1.5; }
+    .log-entry .ts  { color: #555; margin-right: 8px; }
+    .log-entry.log     .msg { color: #ccc; }
+    .log-entry.success .msg { color: #4caf50; font-weight: bold; }
+    .log-entry.error   .msg { color: #f44336; font-weight: bold; }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>India Weather Mailer</h1>
+  <p>Select a state to send today's weather forecast by email</p>
+</header>
+
+<div class="card">
+
+  <!-- Scheduler status banner -->
+  {% if scheduler.window_passed %}
+  <div class="sched-banner finished" id="sched-banner">
+    <div class="badge">Scheduler done</div>
+    <div class="row">Scheduled window for <span>{{ scheduler.state }}</span> has ended.</div>
+    <div class="row">Was active on <span>{{ scheduler.date }}</span> · {{ scheduler.window }} · every {{ scheduler.interval_mins }} min</div>
+  </div>
+  {% elif scheduler.active %}
+  <div class="sched-banner active" id="sched-banner">
+    <div class="badge">Scheduler active</div>
+    <div class="row">Auto-sending <span>{{ scheduler.state }}</span> weather on <span>{{ scheduler.date }}</span></div>
+    <div class="row">Window: <span>{{ scheduler.window }}</span> · every <span>{{ scheduler.interval_mins }} min</span></div>
+    <div class="next" id="next-run">Next run: {{ scheduler.next_run }}</div>
+  </div>
+  {% else %}
+  <div class="sched-banner pending" id="sched-banner">
+    <div class="badge">Scheduler pending</div>
+    <div class="row">Will auto-send <span>{{ scheduler.state }}</span> weather on <span>{{ scheduler.date }}</span></div>
+    <div class="row">Window: <span>{{ scheduler.window }}</span> · every <span>{{ scheduler.interval_mins }} min</span></div>
+  </div>
+  {% endif %}
+
+  <!-- Manual send -->
+  <label for="state-select">State or Union Territory</label>
+  <select id="state-select">
+    {% for s in states %}
+    <option value="{{ s }}">{{ s }}</option>
+    {% endfor %}
+  </select>
+
+  <button id="send-btn" onclick="sendEmail()">Send Weather Email</button>
+
+  <div class="log-panel" id="log-panel"></div>
+</div>
+
+<script>
+  // Poll scheduler status every 30s to update the next-run time
+  function refreshScheduler() {
+    fetch('/scheduler-status')
+      .then(r => r.json())
+      .then(info => {
+        const el = document.getElementById('next-run');
+        if (el && info.next_run) el.textContent = 'Next run: ' + info.next_run;
+        if (info.window_passed) {
+          const banner = document.getElementById('sched-banner');
+          if (banner) {
+            banner.className = 'sched-banner finished';
+            banner.innerHTML = '<div class="badge">Scheduler done</div><div class="row">Scheduled window has ended.</div>';
+          }
+        }
+      })
+      .catch(() => {});
+  }
+  setInterval(refreshScheduler, 30000);
+
+  function sendEmail() {
+    const state = document.getElementById('state-select').value;
+    const panel = document.getElementById('log-panel');
+    const btn   = document.getElementById('send-btn');
+
+    panel.innerHTML = '';
+    panel.classList.add('visible');
+    btn.disabled = true;
+    btn.textContent = 'Sending…';
+
+    const source = new EventSource('/send?state=' + encodeURIComponent(state));
+
+    source.onmessage = function(e) {
+      const { type, msg } = JSON.parse(e.data);
+      addLine(type, msg);
+      if (type === 'success' || type === 'error') {
+        source.close();
+        btn.disabled = false;
+        btn.textContent = 'Send Weather Email';
+      }
+    };
+
+    source.onerror = function() {
+      addLine('error', 'Connection lost.');
+      source.close();
+      btn.disabled = false;
+      btn.textContent = 'Send Weather Email';
+    };
+  }
+
+  function addLine(type, msg) {
+    const panel = document.getElementById('log-panel');
+    const now   = new Date().toLocaleTimeString('en-IN', { hour12: true });
+    const div   = document.createElement('div');
+    div.className = 'log-entry ' + type;
+    div.innerHTML = '<span class="ts">[' + now + ']</span><span class="msg">' + msg + '</span>';
+    panel.appendChild(div);
+    panel.scrollTop = panel.scrollHeight;
+  }
+</script>
+
+</body>
+</html>
